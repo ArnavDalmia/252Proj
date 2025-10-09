@@ -1,0 +1,32 @@
+These are sources and word count for our audio clips:
+
+1. female_noisy_single_neutral
+2. female_quiet_single_neutral
+3. male_quiet_single_slow
+4. child_quiet_single_fast
+5.
+6.
+7.
+
+
+WORD COUNT:
+
+1 - 17 words
+2 - 20 words
+3 - 24 words
+4 - 17 words
+5 - 
+6 - 
+7 - 
+
+
+References:
+
+1 - https://www.wavsource.com/snds_2020-10-01_3728627494378403/people/women/wondering.wav
+2 - https://freesound.org/people/michellelindemann1/sounds/685739/
+3 - https://freesound.org/people/Iceofdoom/sounds/783005/
+4 - https://www.youtube.com/shorts/aP7m7Vf5CzQ
+5 - 
+6 - 
+7 - 
+
