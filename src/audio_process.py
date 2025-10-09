@@ -70,7 +70,12 @@ def process_audio_file(filename):
         print(f'Could not play audio: {e}')
     
     # Task 3.4: Write sound to new file
-    output_filename = 'processed_' + os.path.basename(filename)
+    # Create a subfolder named after the input file
+    base_filename = os.path.splitext(os.path.basename(filename))[0]  # Get filename without extension
+    file_output_dir = os.path.join('data/output', base_filename)
+    os.makedirs(file_output_dir, exist_ok=True)  # Create file-specific output directory
+    
+    output_filename = os.path.join(file_output_dir, 'processed_' + os.path.basename(filename))
     # Convert back to int16 for saving
     audio_int16 = (audio_data * 32767).astype(np.int16)
     wavfile.write(output_filename, fs, audio_int16)
@@ -84,7 +89,8 @@ def process_audio_file(filename):
     plt.title(f'Audio Waveform: {filename}')
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('task3_5_waveform.png', dpi=300, bbox_inches='tight')
+    waveform_path = os.path.join(file_output_dir, f'{base_filename}_waveform.png')
+    plt.savefig(waveform_path, dpi=300, bbox_inches='tight')
     plt.show()
     
     # Task 3.7: Generate 1 kHz cosine signal
@@ -113,7 +119,8 @@ def process_audio_file(filename):
     plt.title('1 kHz Cosine Signal - Two Cycles')
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('task3_7_cosine.png', dpi=300, bbox_inches='tight')
+    cosine_path = os.path.join(file_output_dir, f'{base_filename}_cosine.png')
+    plt.savefig(cosine_path, dpi=300, bbox_inches='tight')
     plt.show()
     
     return audio_data, fs
@@ -139,8 +146,8 @@ def process_multiple_files(file_list):
 # Example usage
 if __name__ == "__main__":
     # Process a single file
-    processed_audio, fs = process_audio_file('audio_files/100981__mo_damage__atari-speech.wav')
-    
+    #processed_audio, fs = process_audio_file('audio_files/100981__mo_damage__atari-speech.wav')
+    processed_audio, fs = process_audio_file('data/input/child_quiet_single_fast/child_quiet_single_fast.wav')
     # Or process multiple files:
     files = [
         'male_speech.wav',
