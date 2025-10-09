@@ -147,14 +147,14 @@ def process_multiple_files(file_list):
 if __name__ == "__main__":
     # Process a single file
     #processed_audio, fs = process_audio_file('audio_files/100981__mo_damage__atari-speech.wav')
-    processed_audio, fs = process_audio_file('data/input/child_quiet_single_fast/child_quiet_single_fast.wav')
+    #processed_audio, fs = process_audio_file('data/input/child_quiet_single_fast/child_quiet_single_fast.wav')
     # Or process multiple files:
     files = [
-        'male_speech.wav',
-        'female_speech.wav',
-        'child_speech.wav',
-        'noisy_speech.wav'
+        'data/input/child_quiet_single_fast/child_quiet_single_fast.wav',
+        'data/input/female_noisy_single_neutral/female_noisy_single_neutral.wav',
+        'data/input/female_quiet_single_neutral/female_quiet_single_neutral.wav',
+        'data/input/male_quiet_single_slow/male_quiet_single_slow.wav'
     ]
     
     # Uncomment to run:
-    # process_multiple_files(files)
+    process_multiple_files(files)
