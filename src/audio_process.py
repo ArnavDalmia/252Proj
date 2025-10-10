@@ -133,7 +133,6 @@ def process_multiple_files(file_list): # loops thru file names and calls primary
             print(f'Error processing {filename}: {e}')
 
 
-# Example usage
 if __name__ == "__main__":
     #Uncomment to run for a single file:
     #processed_audio, fs = process_audio_file('data/input/child_quiet_single_fast/child_quiet_single_fast.wav')
