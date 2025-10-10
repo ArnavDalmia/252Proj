@@ -150,3 +150,6 @@ if __name__ == "__main__":
     
     # Uncomment to run for files var:
     # process_multiple_files(files)
+
+# to run this type in console : 
+# python audio_process.py
