@@ -8,7 +8,8 @@ Python implementation for cochlear implant project
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
-from scipy.signal import resample
+from scipy.signal import resample_poly
+from math import gcd
 import sounddevice as sd
 import os
 
@@ -36,23 +37,20 @@ def process_audio_file(filename):
         audio_data = audio_data.astype(np.float32) / 2147483648.0
     
     # Task 3.2: Convert stereo to mono if necessary
-    if len(audio_data.shape) == 2:
-        num_channels = audio_data.shape[1]
-        if num_channels == 2:
-            print('Stereo audio detected. Converting to mono...')
-            audio_data = audio_data[:, 0] + audio_data[:, 1]  # Add both channels
-        else:
-            audio_data = audio_data[:, 0]  # Take first channel
+    if audio_data.ndim == 2:
+        print('Multichannel audio detected. Converting to mono (average)...')
+        audio_data = audio_data.mean(axis=1)
     else:
         print('Mono audio detected.')
     
     # Task 3.6: Resample to 16 kHz if necessary
     target_fs = 16000  # Target sampling rate
-    
+
     if fs_original != target_fs:
-        print(f'Resampling from {fs_original} Hz to {target_fs} Hz...')
-        num_samples = int(len(audio_data) * target_fs / fs_original)
-        audio_data = resample(audio_data, num_samples)
+        print(f'Resampling from {fs_original} Hz to {target_fs} Hz with polyphase...')
+        g = gcd(fs_original, target_fs)
+        up, down = target_fs // g, fs_original // g   # keep the ratio small
+        audio_data = resample_poly(audio_data, up, down)
         fs = target_fs
     else:
         print('Sampling rate already at 16 kHz.')
@@ -91,7 +89,7 @@ def process_audio_file(filename):
     plt.tight_layout()
     waveform_path = os.path.join(file_output_dir, f'{base_filename}_waveform.png')
     plt.savefig(waveform_path, dpi=300, bbox_inches='tight')
-    plt.show()
+    #plt.show()
     
     # Task 3.7: Generate 1 kHz cosine signal
     freq = 1000  # 1 kHz
@@ -121,7 +119,7 @@ def process_audio_file(filename):
     plt.tight_layout()
     cosine_path = os.path.join(file_output_dir, f'{base_filename}_cosine.png')
     plt.savefig(cosine_path, dpi=300, bbox_inches='tight')
-    plt.show()
+    #plt.show()
     
     return audio_data, fs
 
@@ -147,7 +145,7 @@ def process_multiple_files(file_list):
 if __name__ == "__main__":
     # Process a single file
     #processed_audio, fs = process_audio_file('audio_files/100981__mo_damage__atari-speech.wav')
-    #processed_audio, fs = process_audio_file('data/input/child_quiet_single_fast/child_quiet_single_fast.wav')
+    processed_audio, fs = process_audio_file('data/input/child_quiet_single_fast/child_quiet_single_fast.wav')
     # Or process multiple files:
     files = [
         'data/input/child_quiet_single_fast/child_quiet_single_fast.wav',
@@ -157,4 +155,4 @@ if __name__ == "__main__":
     ]
     
     # Uncomment to run:
-    process_multiple_files(files)
+    #process_multiple_files(files)
