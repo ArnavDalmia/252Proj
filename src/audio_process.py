@@ -36,21 +36,21 @@ def process_audio_file(filename):
     elif audio_data.dtype == np.int32:
         audio_data = audio_data.astype(np.float32) / 2147483648.0
     
-    # Task 3.2: Convert stereo to mono if necessary
+    # Task 3.2: Convert stereo to mono if necessary - using avg and not sum
     if audio_data.ndim == 2:
         print('Multichannel audio detected. Converting to mono (average)...')
         audio_data = audio_data.mean(axis=1)
     else:
         print('Mono audio detected.')
     
-    # Task 3.6: Resample to 16 kHz if necessary
+    # Task 3.6: Check sampling rate and resample to 16 kHz 
     target_fs = 16000  # Target sampling rate
 
     if fs_original != target_fs:
         print(f'Resampling from {fs_original} Hz to {target_fs} Hz with polyphase...')
         g = gcd(fs_original, target_fs)
         up, down = target_fs // g, fs_original // g   # keep the ratio small
-        audio_data = resample_poly(audio_data, up, down)
+        audio_data = resample_poly(audio_data, up, down) # using built in resampling func
         fs = target_fs
     else:
         print('Sampling rate already at 16 kHz.')
@@ -67,15 +67,14 @@ def process_audio_file(filename):
     except Exception as e:
         print(f'Could not play audio: {e}')
     
-    # Task 3.4: Write sound to new file
     # Create a subfolder named after the input file
     base_filename = os.path.splitext(os.path.basename(filename))[0]  # Get filename without extension
     file_output_dir = os.path.join('data/output', base_filename)
-    os.makedirs(file_output_dir, exist_ok=True)  # Create file-specific output directory
+    os.makedirs(file_output_dir, exist_ok=True)  #output dir
     
-    output_filename = os.path.join(file_output_dir, 'processed_' + os.path.basename(filename))
-    # Convert back to int16 for saving
-    audio_int16 = (audio_data * 32767).astype(np.int16)
+    # Task 3.4: Write processed sound file
+    output_filename = os.path.join(file_output_dir, 'processed_' + os.path.basename(filename)) #path
+    audio_int16 = (audio_data * 32767).astype(np.int16) #cinvert back to int16
     wavfile.write(output_filename, fs, audio_int16)
     print(f'Audio saved to: {output_filename}')
     
@@ -87,7 +86,7 @@ def process_audio_file(filename):
     plt.title(f'Audio Waveform: {filename}')
     plt.grid(True)
     plt.tight_layout()
-    waveform_path = os.path.join(file_output_dir, f'{base_filename}_waveform.png')
+    waveform_path = os.path.join(file_output_dir, f'{base_filename}_waveform.png') #same output folder
     plt.savefig(waveform_path, dpi=300, bbox_inches='tight')
     #plt.show()
     
@@ -98,7 +97,6 @@ def process_audio_file(filename):
     
     cosine_signal = np.cos(2 * np.pi * freq * t)
     
-    # Play the cosine signal
     print('Playing 1 kHz cosine signal...')
     try:
         sd.play(cosine_signal, fs)
@@ -106,9 +104,9 @@ def process_audio_file(filename):
     except Exception as e:
         print(f'Could not play cosine: {e}')
     
-    # Plot two cycles of cosine waveform vs time
-    samples_per_cycle = fs / freq  # Samples in one cycle
-    two_cycles = int(2 * samples_per_cycle)  # Samples for 2 cycles
+    # Next plot two cycles of cosine waveform vs time
+    samples_per_cycle = fs / freq #basic 1 cycle
+    two_cycles = int(2 * samples_per_cycle)  # 2 cycles
     
     plt.figure(figsize=(10, 4))
     plt.plot(t[:two_cycles], cosine_signal[:two_cycles], 'b-', linewidth=1.5)
@@ -117,35 +115,29 @@ def process_audio_file(filename):
     plt.title('1 kHz Cosine Signal - Two Cycles')
     plt.grid(True)
     plt.tight_layout()
-    cosine_path = os.path.join(file_output_dir, f'{base_filename}_cosine.png')
+    cosine_path = os.path.join(file_output_dir, f'{base_filename}_cosine.png') #same output path
     plt.savefig(cosine_path, dpi=300, bbox_inches='tight')
     #plt.show()
     
-    return audio_data, fs
+    return audio_data, fs #end of the primary function
 
 
-def process_multiple_files(file_list):
-    """
-    Process multiple audio files
-    
-    Parameters:
-    file_list (list): List of audio file paths
-    """
+def process_multiple_files(file_list): # loops thru file names and calls primary function
     for i, filename in enumerate(file_list):
         print(f'\n{"="*60}')
         print(f'Processing file {i+1}/{len(file_list)}: {filename}')
         print(f'{"="*60}')
         try:
-            process_audio_file(filename)
-        except Exception as e:
+            process_audio_file(filename) # primary func
+        except Exception as e: #general handling
             print(f'Error processing {filename}: {e}')
 
 
 # Example usage
 if __name__ == "__main__":
-    # Process a single file
-    processed_audio, fs = process_audio_file('data/input/child_quiet_single_fast/child_quiet_single_fast.wav')
-    # Or process multiple files:
+    #Uncomment to run for a single file:
+    #processed_audio, fs = process_audio_file('data/input/child_quiet_single_fast/child_quiet_single_fast.wav')
+    
     files = [
         'data/input/child_quiet_single_fast/child_quiet_single_fast.wav',
         'data/input/female_noisy_single_neutral/female_noisy_single_neutral.wav',
@@ -157,5 +149,5 @@ if __name__ == "__main__":
         'data/input/multiple_noisy_overlapped_neutral/multiple_noisy_overlapped_neutral.wav'
     ]
     
-    # Uncomment to run:
+    # Uncomment to run for files var:
     # process_multiple_files(files)
