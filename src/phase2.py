@@ -394,14 +394,14 @@ def process_multiple_files(file_list, run_phase2=True, play_audio=False):
 
 if __name__ == "__main__":
     audio, fs = process_audio_file(
-        'data/input/child_quiet_single_fast/child_quiet_single_fast.wav',
+        'data/input/multiple_noisy_overlapped_neutral/multiple_noisy_overlapped_neutral.wav',
         run_phase2=True, play_audio=False
     )
 
     files = [
         'data/input/child_quiet_single_fast/child_quiet_single_fast.wav',
         'data/input/female_noisy_single_neutral/female_noisy_single_neutral.wav',
-        'data/input/female_quiet_single_neutral/female_quiet_single_neutral.wav',
+        'data/input/female_quiet_single_neutral/female_quiet_single_neutral.wav', 
         'data/input/male_quiet_single_slow/male_quiet_single_slow.wav',
         'data/input/females_noisy_convo_neutral/females_noisy_convo_neutral.wav',
         'data/input/male_noisy_single_neutral/male_noisy_single_neutral.wav',
