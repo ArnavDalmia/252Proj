@@ -3,7 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
-from scipy.signal import resample_poly, butter, filtfilt, fftconvolve
+from scipy.signal import resample_poly, butter, filtfilt, fftconvolve, lfilter
 from math import gcd
 import sounddevice as sd
 import os
@@ -60,7 +60,6 @@ def process_audio_file_phase1(filename, target_fs=16000, play_audio=True):
     # Normalize audio
     audio_data = audio_data / np.max(np.abs(audio_data))
 
-    # Optional: play the sound (can disable for Phase 2 runs)
     if play_audio:
         print('Playing audio...')
         try:
@@ -100,7 +99,6 @@ def process_audio_file_phase1(filename, target_fs=16000, play_audio=True):
 def cosine_demo(audio_data, fs, file_output_dir, base_filename):
     """
     Task 3.7 cosine demo (Phase 1).
-    You can comment this out when running Phase 2 if the doc asks.
     """
     freq = 1000  # 1 kHz
     t = np.arange(len(audio_data)) / fs
@@ -113,7 +111,6 @@ def cosine_demo(audio_data, fs, file_output_dir, base_filename):
     except Exception as e:
         print(f'Could not play cosine: {e}')
 
-    # Plot two cycles of cosine waveform vs time
     samples_per_cycle = fs / freq
     two_cycles = int(2 * samples_per_cycle)
 
@@ -135,17 +132,17 @@ def cosine_demo(audio_data, fs, file_output_dir, base_filename):
 # Phase 2: gammatone filterbank + envelopes
 # ---------------------------------------------------------
 
-# Custom band edges from your screenshot
 BAND_EDGES = np.array(
     [100, 144, 207, 299, 430, 619,
      892, 1284, 1849, 2663, 3835, 5522, 8000],
     dtype=float
 )
 
+# for example one band could be 100-144 hz, or even 5522-8000hz
 
-def erb(fc_hz):
-    """Glasberg & Moore ERB in Hz."""
-    return 24.7 * (4.37 * fc_hz / 1000.0 + 1.0)
+
+def erb(fc_hz): #conversion - mathematical equality
+    return 24.7 * (4.37 * fc_hz / 1000.0 + 1.0) # Glasberg & Moore ERB in Hz
 
 
 def design_gammatone_ir(fc, fs, n_order=4, t_len=0.030, b_factor=1.019):
@@ -167,11 +164,9 @@ def design_gammatone_ir(fc, fs, n_order=4, t_len=0.030, b_factor=1.019):
 
     # Hann window for smooth truncation
     h *= np.hanning(L)
+    h /= np.max(np.abs(h) + 1e-12) # basic normalization
 
-    # Simple normalization (not exactly the Matlab freqz-based one but OK)
-    h /= np.max(np.abs(h) + 1e-12)
-
-    return h.astype(np.float32)
+    return h.astype(np.float32) 
 
 
 def design_gammatone_bank(fs, band_edges=BAND_EDGES, n_order=4):
@@ -187,7 +182,7 @@ def design_gammatone_bank(fs, band_edges=BAND_EDGES, n_order=4):
     """
     lows = band_edges[:-1]
     highs = band_edges[1:]
-    center_freqs = np.sqrt(lows * highs)  # geometric mean per band
+    center_freqs = np.sqrt(lows * highs)  # geometric mean per band, still in list format
 
     filters = [design_gammatone_ir(fc, fs, n_order=n_order)
                for fc in center_freqs]
@@ -233,29 +228,24 @@ def extract_envelopes(bands, fs, fc_lp=400.0, order=4):
     Returns:
         envelopes: 2D array [len(x), N]
     """
-    rectified = np.abs(bands)
+    rectified = np.abs(bands) #rectify task 7
 
-    # Butterworth lowpass
+    # Butterworth lowpass - task 8
     nyq = fs / 2.0
     Wn = fc_lp / nyq
     b_lp, a_lp = butter(order, Wn, btype='low')
 
     # filtfilt for zero-phase envelopes
-    envelopes = filtfilt(b_lp, a_lp, rectified, axis=0)
+    #envelopes = filtfilt(b_lp, a_lp, rectified, axis=0)
+    envelopes = lfilter(b_lp, a_lp, rectified, axis=0)
+    # passing the rectified signal through a 400 Hz Butterworth lowpass filter - manually doing the envelope extraction as “rectify + lowpass”
 
     return envelopes
 
-
-def plot_phase2_results(audio_data, fs, bands, envelopes,
-                        center_freqs, file_output_dir, base_filename):
-    """
-    Plot:
-    - lowest & highest band outputs
-    - lowest & highest envelopes
-    """
+def plot_phase2_results(audio_data, fs, bands, envelopes, center_freqs, file_output_dir, base_filename):
     t = np.arange(len(audio_data)) / fs
 
-    # Lowest and highest band outputs
+    # ---------- Lowest and highest band outputs (Task 6) ----------
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 1, 1)
     plt.plot(t, bands[:, 0])
@@ -279,7 +269,7 @@ def plot_phase2_results(audio_data, fs, bands, envelopes,
     plt.close()
     print(f'Band output plots saved to: {band_plot_path}')
 
-    # Lowest and highest envelopes
+    # ---------- Lowest and highest envelopes (Task 9) ----------
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 1, 1)
     plt.plot(t, envelopes[:, 0])
@@ -303,11 +293,60 @@ def plot_phase2_results(audio_data, fs, bands, envelopes,
     plt.close()
     print(f'Envelope plots saved to: {env_plot_path}')
 
+    # ---------- All band outputs----------
+    num_ch = bands.shape[1]
+    cols = 4
+    rows = int(np.ceil(num_ch / cols))
 
-def run_phase2_pipeline(audio_data, fs, file_output_dir, base_filename):
-    """
-    Wrapper that runs Tasks 4–9 of Phase 2 on a given audio signal.
-    """
+    fig, axes = plt.subplots(rows, cols, figsize=(16, 3 * rows), sharex=True)
+    axes = axes.flatten()
+
+    for k in range(num_ch):
+        ax = axes[k]
+        ax.plot(t, bands[:, k])
+        ax.set_title(f'Band {k+1} ({center_freqs[k]:.1f} Hz)', fontsize=9)
+        ax.grid(True)
+
+    # Turn off any unused subplots
+    for ax in axes[num_ch:]:
+        ax.axis('off')
+
+    fig.suptitle('All Band Outputs', fontsize=14)
+    fig.supxlabel('Time (s)')
+    fig.supylabel('Amplitude')
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    bands_all_path = os.path.join(
+        file_output_dir, f'{base_filename}_bands_all.png'
+    )
+    fig.savefig(bands_all_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    print(f'All-band output plots saved to: {bands_all_path}')
+
+    # ---------- All band envelopes----------
+    fig, axes = plt.subplots(rows, cols, figsize=(16, 3 * rows), sharex=True)
+    axes = axes.flatten()
+
+    for k in range(num_ch):
+        ax = axes[k]
+        ax.plot(t, envelopes[:, k])
+        ax.set_title(f'Env Band {k+1} ({center_freqs[k]:.1f} Hz)', fontsize=9)
+        ax.grid(True)
+
+    for ax in axes[num_ch:]:
+        ax.axis('off')
+
+    fig.suptitle('Envelopes of All Bands', fontsize=14)
+    fig.supxlabel('Time (s)')
+    fig.supylabel('Amplitude')
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    env_all_path = os.path.join(
+        file_output_dir, f'{base_filename}_envelopes_all.png'
+    )
+    fig.savefig(env_all_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    print(f'All-band envelope plots saved to: {env_all_path}')
+
+def run_phase2_pipeline(audio_data, fs, file_output_dir, base_filename): #command func
     print('\n--- Phase 2: Designing gammatone filterbank ---')
     h_bank, center_freqs = design_gammatone_bank(fs)
 
@@ -323,16 +362,11 @@ def run_phase2_pipeline(audio_data, fs, file_output_dir, base_filename):
 
     return bands, envelopes, center_freqs
 
-
-# ---------------------------------------------------------
-# Convenience wrappers for multiple files
-# ---------------------------------------------------------
-
 def process_audio_file(filename, run_phase2=True, play_audio=True):
     """
     High-level function that:
     - Runs Phase 1 on the file
-    - Optionally runs Phase 2 on the processed audio
+    - Runs Phase 2 on the processed audio
     """
     audio_data, fs, file_output_dir, base_filename = \
         process_audio_file_phase1(filename, play_audio=play_audio)
@@ -359,11 +393,10 @@ def process_multiple_files(file_list, run_phase2=True, play_audio=False):
 
 
 if __name__ == "__main__":
-    # Example single file:
-    # audio, fs = process_audio_file(
-    #     'data/input/child_quiet_single_fast/child_quiet_single_fast.wav',
-    #     run_phase2=True, play_audio=False
-    # )
+    audio, fs = process_audio_file(
+        'data/input/child_quiet_single_fast/child_quiet_single_fast.wav',
+        run_phase2=True, play_audio=False
+    )
 
     files = [
         'data/input/child_quiet_single_fast/child_quiet_single_fast.wav',
