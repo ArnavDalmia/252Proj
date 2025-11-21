@@ -10,7 +10,7 @@ import os
 
 
 # ---------------------------------------------------------
-# Phase 1: loading, resampling, saving, basic plots
+# Phase 1: loading, resampling, saving, basic plots - from prev code, simple refactoring
 # ---------------------------------------------------------
 
 def process_audio_file_phase1(filename, target_fs=16000, play_audio=True):
@@ -171,13 +171,13 @@ def design_gammatone_ir(fc, fs, n_order=4, t_len=0.030, b_factor=1.019):
 
 def design_gammatone_bank(fs, band_edges=BAND_EDGES, n_order=4):
     """
-    Design a bank of gammatone FIR filters using custom band edges.
+    Design: Bank of gammatone FIR filters using custom band edges desc above
 
-    - band_edges: array of length N+1 (low0, high0, high1, ..., highN-1)
-    - center freqs = geometric mean of each band
+    - band_edges: array of length N+1 (low0, high0, high1, ..., highN-1) created***
+    - center freqs = geometric mean of each band = (sqrt(low * high))
 
     Returns:
-        h_bank: 2D array [L, N] of filter taps
+        h_bank: 2D array [L, N] of filter taps - to be used later on
         center_freqs: 1D array [N] of center frequencies
     """
     lows = band_edges[:-1]
@@ -202,7 +202,7 @@ def design_gammatone_bank(fs, band_edges=BAND_EDGES, n_order=4):
 
 def apply_gammatone_bank(x, h_bank):
     """
-    Convolve input x with each column of h_bank.
+    Apply input x with each column of h_bank.
 
     Returns:
         bands: 2D array [len(x), N]
@@ -223,7 +223,7 @@ def extract_envelopes(bands, fs, fc_lp=400.0, order=4):
     """
     Envelope extraction:
     - full-wave rectify each channel
-    - lowpass at fc_lp (Butterworth, order 'order')
+    - lowpass at fc_lp (Butterworth low pass, order = 'order')
 
     Returns:
         envelopes: 2D array [len(x), N]
