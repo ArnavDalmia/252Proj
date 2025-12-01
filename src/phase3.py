@@ -467,11 +467,11 @@ def process_multiple_files(file_list, run_phase2=True, play_audio=False):
 
 if __name__ == "__main__":
     audio, fs = process_audio_file(
-        'data/input/multiple_noisy_overlapped_neutral/multiple_noisy_overlapped_neutral.wav',
+        'data/input/multiple_noisy_convo_neutral/multiple_noisy_convo_neutral.wav',
         run_phase2=True,
-        run_phase3=True,    # <-- enable Phase 3
+        run_phase3=True,
         play_audio=False,
-        play_phase3=True    # set False if you don't want to auto-play the output
+        play_phase3=True
     )
 
 
