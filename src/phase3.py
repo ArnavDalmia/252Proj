@@ -145,10 +145,13 @@ def erb(fc_hz): #conversion - mathematical equality
     return 24.7 * (4.37 * fc_hz / 1000.0 + 1.0) # Glasberg & Moore ERB in Hz
 
 
-def design_gammatone_ir(fc, fs, n_order=4, t_len=0.030, b_factor=1.019):
+def design_gammatone_ir(fc, fs, n_order=4, t_len=0.030, b_factor=1.019, bandwidth_extension=1.0):
     """
     Design a single gammatone FIR impulse response for center frequency fc.
 
+    Parameters:
+        bandwidth_extension: Factor to widen bandwidth (default 1.0 = no change)
+                           Use 1.1-1.2 for 10-20% overlap (Iteration 1)
     Returns:
         h (np.ndarray): impulse response (1D float32)
     """
@@ -156,7 +159,7 @@ def design_gammatone_ir(fc, fs, n_order=4, t_len=0.030, b_factor=1.019):
     t = np.arange(L) / fs
 
     ERB = erb(fc)
-    b = b_factor * ERB  # bandwidth parameter
+    b = b_factor * ERB * bandwidth_extension  # bandwidth parameter with extension
 
     env = (t ** (n_order - 1)) * np.exp(-2 * np.pi * b * t)
     carrier = np.cos(2 * np.pi * fc * t)
@@ -169,22 +172,46 @@ def design_gammatone_ir(fc, fs, n_order=4, t_len=0.030, b_factor=1.019):
     return h.astype(np.float32) 
 
 
-def design_gammatone_bank(fs, band_edges=BAND_EDGES, n_order=4):
+def design_butterworth_bandpass(fc, fs, bandwidth_hz, order=4):
+    """
+    Design a Butterworth bandpass filter centered at fc.
+    Used for high-frequency bands in Iteration 1.
+    
+    Returns:
+        b, a: Filter coefficients for scipy.signal.lfilter
+    """
+    nyq = fs / 2.0
+    low = (fc - bandwidth_hz/2) / nyq
+    high = (fc + bandwidth_hz/2) / nyq
+    # Clamp to valid range
+    low = max(0.01, min(0.99, low))
+    high = max(0.01, min(0.99, high))
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
+
+
+def design_gammatone_bank(fs, band_edges=BAND_EDGES, n_order=4, bandwidth_extension=1.0, 
+                         use_butterworth_high=False, n_butterworth_bands=0):
     """
     Design: Bank of gammatone FIR filters using custom band edges desc above
 
     - band_edges: array of length N+1 (low0, high0, high1, ..., highN-1) created***
     - center freqs = geometric mean of each band = (sqrt(low * high))
+    - bandwidth_extension: Factor to widen gammatone bandwidth (Iteration 1: 1.15 for 15% overlap)
+    - use_butterworth_high: If True, use Butterworth for top bands (Iteration 1)
+    - n_butterworth_bands: Number of top bands to use Butterworth (Iteration 1: 3-4)
 
     Returns:
         h_bank: 2D array [L, N] of filter taps - to be used later on
         center_freqs: 1D array [N] of center frequencies
+        butterworth_filters: list of (b, a) tuples for Butterworth bands (or None)
     """
     lows = band_edges[:-1]
     highs = band_edges[1:]
     center_freqs = np.sqrt(lows * highs)  # geometric mean per band, still in list format
 
-    filters = [design_gammatone_ir(fc, fs, n_order=n_order)
+    # Design gammatone filters with potential bandwidth extension
+    filters = [design_gammatone_ir(fc, fs, n_order=n_order, bandwidth_extension=bandwidth_extension)
                for fc in center_freqs]
 
     max_len = max(len(h) for h in filters)
@@ -194,15 +221,31 @@ def design_gammatone_bank(fs, band_edges=BAND_EDGES, n_order=4):
     for k, h in enumerate(filters):
         h_bank[:len(h), k] = h
 
+    # Prepare Butterworth filters for high bands if requested
+    butterworth_filters = None
+    if use_butterworth_high and n_butterworth_bands > 0:
+        butterworth_filters = []
+        for k in range(N):
+            if k >= (N - n_butterworth_bands):
+                # Use Butterworth for this high band
+                bandwidth_hz = erb(center_freqs[k]) * bandwidth_extension * 1.019
+                b, a = design_butterworth_bandpass(center_freqs[k], fs, bandwidth_hz, order=4)
+                butterworth_filters.append((b, a))
+            else:
+                butterworth_filters.append(None)
+    
     print('Designed gammatone bank with center freqs (Hz):')
     print(np.round(center_freqs, 1))
+    if use_butterworth_high:
+        print(f'Using Butterworth bandpass for top {n_butterworth_bands} bands')
 
-    return h_bank, center_freqs
+    return h_bank, center_freqs, butterworth_filters
 
 
-def apply_gammatone_bank(x, h_bank):
+def apply_gammatone_bank(x, h_bank, butterworth_filters=None):
     """
     Apply input x with each column of h_bank.
+    If butterworth_filters is provided, use IIR filtering for those bands.
 
     Returns:
         bands: 2D array [len(x), N]
@@ -212,9 +255,16 @@ def apply_gammatone_bank(x, h_bank):
     bands = np.zeros((n_samples, N), dtype=np.float32)
 
     for k in range(N):
-        h = h_bank[:, k]
-        y = fftconvolve(x, h, mode="same")
-        bands[:, k] = y.astype(np.float32)
+        # Check if this band uses Butterworth
+        if butterworth_filters is not None and butterworth_filters[k] is not None:
+            b, a = butterworth_filters[k]
+            y = lfilter(b, a, x)
+            bands[:, k] = y.astype(np.float32)
+        else:
+            # Use gammatone FIR
+            h = h_bank[:, k]
+            y = fftconvolve(x, h, mode="same")
+            bands[:, k] = y.astype(np.float32)
 
     return bands
 
@@ -346,15 +396,22 @@ def plot_phase2_results(audio_data, fs, bands, envelopes, center_freqs, file_out
     plt.close(fig)
     print(f'All-band envelope plots saved to: {env_all_path}')
 
-def run_phase2_pipeline(audio_data, fs, file_output_dir, base_filename): 
+def run_phase2_pipeline(audio_data, fs, file_output_dir, base_filename, 
+                       bandwidth_extension=1.0, use_butterworth_high=False, 
+                       n_butterworth_bands=0, envelope_cutoff=400.0, envelope_order=4): 
     print('\n--- Phase 2: Designing gammatone filterbank ---')
-    h_bank, center_freqs = design_gammatone_bank(fs)
+    h_bank, center_freqs, butterworth_filters = design_gammatone_bank(
+        fs, 
+        bandwidth_extension=bandwidth_extension,
+        use_butterworth_high=use_butterworth_high,
+        n_butterworth_bands=n_butterworth_bands
+    )
 
     print('Filtering audio through gammatone bank (Task 5)...')
-    bands = apply_gammatone_bank(audio_data, h_bank)
+    bands = apply_gammatone_bank(audio_data, h_bank, butterworth_filters)
 
-    print('Extracting envelopes (Tasks 7–8)...')
-    envelopes = extract_envelopes(bands, fs, fc_lp=400.0, order=4)
+    print(f'Extracting envelopes (fc_lp={envelope_cutoff} Hz, order={envelope_order})...')
+    envelopes = extract_envelopes(bands, fs, fc_lp=envelope_cutoff, order=envelope_order)
 
     print('Plotting Phase 2 results (Tasks 6 & 9)...')
     plot_phase2_results(audio_data, fs, bands, envelopes,
@@ -426,21 +483,67 @@ def run_phase3_pipeline(audio_data, fs, envelopes, center_freqs,file_output_dir,
 
 
 def process_audio_file(filename, run_phase2=True, run_phase3=False,
-                       play_audio=True, play_phase3=True):
+                       play_audio=True, play_phase3=True,
+                       iteration=None, output_subdir=None):
     """
     High-level function that:
     - Runs Phase 1 on the file
     - Optionally runs Phase 2 on the processed audio
     - Optionally runs Phase 3 synthesis (Tasks 10–13)
+    
+    Parameters:
+        iteration: 'iteration1' or 'iteration2' for specific configurations
+        output_subdir: Custom output subdirectory (e.g., 'iteration1/child_quiet_single_fast')
     """
     audio_data, fs, file_output_dir, base_filename = \
         process_audio_file_phase1(filename, play_audio=play_audio)
+    
+    # Override output directory if specified
+    if output_subdir is not None:
+        file_output_dir = os.path.join('data/output', output_subdir)
+        os.makedirs(file_output_dir, exist_ok=True)
 
     bands = envelopes = center_freqs = None
 
+    # Set parameters based on iteration
+    bandwidth_extension = 1.0
+    use_butterworth_high = False
+    n_butterworth_bands = 0
+    envelope_cutoff = 400.0
+    envelope_order = 4
+    
+    if iteration == 'iteration1':
+        # Iteration 1: Band overlap + Butterworth high-freq filters
+        bandwidth_extension = 1.15  # 15% bandwidth extension for overlap
+        use_butterworth_high = True
+        n_butterworth_bands = 4  # Top 4 bands use Butterworth
+        envelope_cutoff = 400.0
+        envelope_order = 4
+        print('\n=== ITERATION 1 Configuration ===')
+        print(f'- Bandwidth extension: {bandwidth_extension} (15% overlap)')
+        print(f'- Top {n_butterworth_bands} bands use Butterworth filters')
+        print(f'- Envelope cutoff: {envelope_cutoff} Hz')
+        
+    elif iteration == 'iteration2':
+        # Iteration 2: Higher envelope cutoff, use Iteration 1 filter bank
+        bandwidth_extension = 1.15  # Same as Iteration 1
+        use_butterworth_high = True
+        n_butterworth_bands = 4
+        envelope_cutoff = 600.0  # Increased from 400 Hz
+        envelope_order = 16  # Increased from 4
+        print('\n=== ITERATION 2 Configuration ===')
+        print(f'- Using Iteration 1 filter bank (bandwidth={bandwidth_extension})')
+        print(f'- Envelope cutoff: {envelope_cutoff} Hz (increased from 400 Hz)')
+        print(f'- Envelope order: {envelope_order} taps (increased from 4)')
+
     if run_phase2:
         bands, envelopes, center_freqs = \
-            run_phase2_pipeline(audio_data, fs, file_output_dir, base_filename)
+            run_phase2_pipeline(audio_data, fs, file_output_dir, base_filename,
+                              bandwidth_extension=bandwidth_extension,
+                              use_butterworth_high=use_butterworth_high,
+                              n_butterworth_bands=n_butterworth_bands,
+                              envelope_cutoff=envelope_cutoff,
+                              envelope_order=envelope_order)
 
     if run_phase3 and envelopes is not None and center_freqs is not None:
         run_phase3_pipeline(audio_data, fs, envelopes, center_freqs,
@@ -466,15 +569,6 @@ def process_multiple_files(file_list, run_phase2=True, play_audio=False):
 
 
 if __name__ == "__main__":
-    audio, fs = process_audio_file(
-        'data/input/multiple_noisy_convo_neutral/multiple_noisy_convo_neutral.wav',
-        run_phase2=True,
-        run_phase3=True,
-        play_audio=False,
-        play_phase3=True
-    )
-
-
     files = [
         'data/input/child_quiet_single_fast/child_quiet_single_fast.wav',
         'data/input/female_noisy_single_neutral/female_noisy_single_neutral.wav',
@@ -486,5 +580,52 @@ if __name__ == "__main__":
         'data/input/multiple_noisy_overlapped_neutral/multiple_noisy_overlapped_neutral.wav'
     ]
 
-    # Run Phase 1+2 on all files (no playback to save your ears)
-    # process_multiple_files(files, run_phase2=True, play_audio=False)
+    # Process all files for Iteration 1
+    print('\n' + '='*80)
+    print('PROCESSING ALL FILES FOR ITERATION 1')
+    print('='*80)
+    for filename in files:
+        # Extract the category name from path
+        category = os.path.basename(os.path.dirname(filename))
+        output_subdir = f'iteration1/{category}'
+        
+        print(f'\nProcessing: {filename}')
+        try:
+            process_audio_file(
+                filename,
+                run_phase2=True,
+                run_phase3=True,
+                play_audio=False,
+                play_phase3=False,
+                iteration='iteration1',
+                output_subdir=output_subdir
+            )
+        except Exception as e:
+            print(f'Error processing {filename}: {e}')
+    
+    # Process all files for Iteration 2
+    print('\n' + '='*80)
+    print('PROCESSING ALL FILES FOR ITERATION 2')
+    print('='*80)
+    for filename in files:
+        # Extract the category name from path
+        category = os.path.basename(os.path.dirname(filename))
+        output_subdir = f'iteration2/{category}'
+        
+        print(f'\nProcessing: {filename}')
+        try:
+            process_audio_file(
+                filename,
+                run_phase2=True,
+                run_phase3=True,
+                play_audio=False,
+                play_phase3=False,
+                iteration='iteration2',
+                output_subdir=output_subdir
+            )
+        except Exception as e:
+            print(f'Error processing {filename}: {e}')
+    
+    print('\n' + '='*80)
+    print('PROCESSING COMPLETE')
+    print('='*80)
