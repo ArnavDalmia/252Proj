@@ -132,11 +132,20 @@ def cosine_demo(audio_data, fs, file_output_dir, base_filename):
 # Phase 2: gammatone filterbank + envelopes
 # ---------------------------------------------------------
 
-BAND_EDGES = np.array(
+# 12 bands (original)
+BAND_EDGES_12 = np.array(
     [100, 144, 207, 299, 430, 619,
      892, 1284, 1849, 2663, 3835, 5522, 8000],
     dtype=float
 )
+
+# 8 bands (reduced for iteration 3)
+BAND_EDGES_8 = np.array(
+    [100, 172, 299, 515, 892, 1540, 2663, 4602, 8000],
+    dtype=float
+)
+
+BAND_EDGES = BAND_EDGES_12  # default
 
 # for example one band could be 100-144 hz, or even 5522-8000hz
 
@@ -190,7 +199,7 @@ def design_butterworth_bandpass(fc, fs, bandwidth_hz, order=4):
     return b, a
 
 
-def design_gammatone_bank(fs, band_edges=BAND_EDGES, n_order=4, bandwidth_extension=1.0, 
+def design_gammatone_bank(fs, band_edges=BAND_EDGES_12, n_order=4, bandwidth_extension=1.0, 
                          use_butterworth_high=False, n_butterworth_bands=0):
     """
     Design: Bank of gammatone FIR filters using custom band edges desc above
@@ -398,10 +407,12 @@ def plot_phase2_results(audio_data, fs, bands, envelopes, center_freqs, file_out
 
 def run_phase2_pipeline(audio_data, fs, file_output_dir, base_filename, 
                        bandwidth_extension=1.0, use_butterworth_high=False, 
-                       n_butterworth_bands=0, envelope_cutoff=400.0, envelope_order=4): 
+                       n_butterworth_bands=0, envelope_cutoff=400.0, envelope_order=4,
+                       band_edges=BAND_EDGES_12): 
     print('\n--- Phase 2: Designing gammatone filterbank ---')
     h_bank, center_freqs, butterworth_filters = design_gammatone_bank(
         fs, 
+        band_edges=band_edges,
         bandwidth_extension=bandwidth_extension,
         use_butterworth_high=use_butterworth_high,
         n_butterworth_bands=n_butterworth_bands
@@ -511,6 +522,7 @@ def process_audio_file(filename, run_phase2=True, run_phase3=False,
     n_butterworth_bands = 0
     envelope_cutoff = 400.0
     envelope_order = 4
+    band_edges = BAND_EDGES_12  # default to 12 bands
     
     if iteration == 'iteration1':
         # Iteration 1: Band overlap + Butterworth high-freq filters
@@ -519,6 +531,7 @@ def process_audio_file(filename, run_phase2=True, run_phase3=False,
         n_butterworth_bands = 4  # Top 4 bands use Butterworth
         envelope_cutoff = 400.0
         envelope_order = 4
+        band_edges = BAND_EDGES_12
         print('\n=== ITERATION 1 Configuration ===')
         print(f'- Bandwidth extension: {bandwidth_extension} (15% overlap)')
         print(f'- Top {n_butterworth_bands} bands use Butterworth filters')
@@ -531,10 +544,26 @@ def process_audio_file(filename, run_phase2=True, run_phase3=False,
         n_butterworth_bands = 4
         envelope_cutoff = 600.0  # Increased from 400 Hz
         envelope_order = 16  # Increased from 4
+        band_edges = BAND_EDGES_12
         print('\n=== ITERATION 2 Configuration ===')
         print(f'- Using Iteration 1 filter bank (bandwidth={bandwidth_extension})')
         print(f'- Envelope cutoff: {envelope_cutoff} Hz (increased from 400 Hz)')
         print(f'- Envelope order: {envelope_order} taps (increased from 4)')
+        
+    elif iteration == 'iteration3':
+        # Iteration 3: 8 channels instead of 12, building off iteration 2
+        bandwidth_extension = 1.15  # Same as Iteration 2
+        use_butterworth_high = True
+        n_butterworth_bands = 3  # Top 3 of 8 bands use Butterworth
+        envelope_cutoff = 600.0  # Same as Iteration 2
+        envelope_order = 16  # Same as Iteration 2
+        band_edges = BAND_EDGES_8  # 8 bands instead of 12
+        print('\n=== ITERATION 3 Configuration ===')
+        print(f'- Reduced to 8 channels (from 12)')
+        print(f'- Bandwidth extension: {bandwidth_extension}')
+        print(f'- Top {n_butterworth_bands} bands use Butterworth filters')
+        print(f'- Envelope cutoff: {envelope_cutoff} Hz')
+        print(f'- Envelope order: {envelope_order} taps')
 
     if run_phase2:
         bands, envelopes, center_freqs = \
@@ -543,7 +572,8 @@ def process_audio_file(filename, run_phase2=True, run_phase3=False,
                               use_butterworth_high=use_butterworth_high,
                               n_butterworth_bands=n_butterworth_bands,
                               envelope_cutoff=envelope_cutoff,
-                              envelope_order=envelope_order)
+                              envelope_order=envelope_order,
+                              band_edges=band_edges)
 
     if run_phase3 and envelopes is not None and center_freqs is not None:
         run_phase3_pipeline(audio_data, fs, envelopes, center_freqs,
@@ -580,14 +610,14 @@ if __name__ == "__main__":
         'data/input/multiple_noisy_overlapped_neutral/multiple_noisy_overlapped_neutral.wav'
     ]
 
-    # Process all files for Iteration 1
+    # Process all files for Iteration 3 (8 channels, building off iteration 2)
     print('\n' + '='*80)
-    print('PROCESSING ALL FILES FOR ITERATION 1')
+    print('PROCESSING ALL FILES FOR ITERATION 3 (8 CHANNELS)')
     print('='*80)
     for filename in files:
         # Extract the category name from path
         category = os.path.basename(os.path.dirname(filename))
-        output_subdir = f'iteration1/{category}'
+        output_subdir = f'iteration3/{category}'
         
         print(f'\nProcessing: {filename}')
         try:
@@ -597,30 +627,7 @@ if __name__ == "__main__":
                 run_phase3=True,
                 play_audio=False,
                 play_phase3=False,
-                iteration='iteration1',
-                output_subdir=output_subdir
-            )
-        except Exception as e:
-            print(f'Error processing {filename}: {e}')
-    
-    # Process all files for Iteration 2
-    print('\n' + '='*80)
-    print('PROCESSING ALL FILES FOR ITERATION 2')
-    print('='*80)
-    for filename in files:
-        # Extract the category name from path
-        category = os.path.basename(os.path.dirname(filename))
-        output_subdir = f'iteration2/{category}'
-        
-        print(f'\nProcessing: {filename}')
-        try:
-            process_audio_file(
-                filename,
-                run_phase2=True,
-                run_phase3=True,
-                play_audio=False,
-                play_phase3=False,
-                iteration='iteration2',
+                iteration='iteration3',
                 output_subdir=output_subdir
             )
         except Exception as e:
