@@ -139,11 +139,11 @@ BAND_EDGES_12 = np.array(
     dtype=float
 )
 
-# 8 bands (reduced for iteration 3)
-BAND_EDGES_8 = np.array(
-    [100, 172, 299, 515, 892, 1540, 2663, 4602, 8000],
-    dtype=float
-)
+# 16 bands (increased for iteration 3)
+BAND_EDGES_16 = np.logspace(np.log10(100), np.log10(8000), 17)
+
+# Default to 12 bands
+BAND_EDGES = BAND_EDGES_12
 
 BAND_EDGES = BAND_EDGES_12  # default
 
@@ -551,15 +551,15 @@ def process_audio_file(filename, run_phase2=True, run_phase3=False,
         print(f'- Envelope order: {envelope_order} taps (increased from 4)')
         
     elif iteration == 'iteration3':
-        # Iteration 3: 8 channels instead of 12, building off iteration 2
-        bandwidth_extension = 1.15  # Same as Iteration 2
+        # Iteration 3: 16 bands, building off Iteration 2
+        bandwidth_extension = 1.15
         use_butterworth_high = True
-        n_butterworth_bands = 3  # Top 3 of 8 bands use Butterworth
-        envelope_cutoff = 600.0  # Same as Iteration 2
-        envelope_order = 16  # Same as Iteration 2
-        band_edges = BAND_EDGES_8  # 8 bands instead of 12
+        n_butterworth_bands = 5  # Top 5 bands for 16-band system
+        envelope_cutoff = 600.0
+        envelope_order = 16
+        band_edges = BAND_EDGES_16  # Use 16 bands
         print('\n=== ITERATION 3 Configuration ===')
-        print(f'- Reduced to 8 channels (from 12)')
+        print(f'- Number of bands: 16 (increased from 12)')
         print(f'- Bandwidth extension: {bandwidth_extension}')
         print(f'- Top {n_butterworth_bands} bands use Butterworth filters')
         print(f'- Envelope cutoff: {envelope_cutoff} Hz')
@@ -610,9 +610,9 @@ if __name__ == "__main__":
         'data/input/multiple_noisy_overlapped_neutral/multiple_noisy_overlapped_neutral.wav'
     ]
 
-    # Process all files for Iteration 3 (8 channels, building off iteration 2)
+    # Process all files for Iteration 3 (16 channels, building off iteration 2)
     print('\n' + '='*80)
-    print('PROCESSING ALL FILES FOR ITERATION 3 (8 CHANNELS)')
+    print('PROCESSING ALL FILES FOR ITERATION 3 (16 CHANNELS)')
     print('='*80)
     for filename in files:
         # Extract the category name from path
